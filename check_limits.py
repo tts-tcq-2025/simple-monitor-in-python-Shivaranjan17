@@ -1,83 +1,49 @@
-# Threshold definition with tolerance support
+# ---------------- Extension 1: Early Warning ----------------
+
 LIMITS = {
     'temperature': {'min': 0, 'max': 45},
     'soc': {'min': 20, 'max': 80},
     'charge_rate': {'min': 0, 'max': 0.8}
 }
 
-# Breach types
-LOW = 'LOW'
-HIGH = 'HIGH'
-NORMAL = 'NORMAL'
-WARNING_LOW = 'WARNING_LOW'
-WARNING_HIGH = 'WARNING_HIGH'
+LOW, HIGH, NORMAL, WARNING_LOW, WARNING_HIGH = 'LOW', 'HIGH', 'NORMAL', 'WARNING_LOW', 'WARNING_HIGH'
+TOLERANCE_FACTOR = 0.015  # 1.5% of upper limit
 
-TOLERANCE_FACTOR = 0.015  # 1.5%
+class ConsoleReporter:
+    def report(self, vital_name, message):
+        print(f"{vital_name}: {message}")
 
-# Messages for reporting
-MESSAGES = {
-    'temperature': {
-        LOW: "Temperature too low! Hypothermia risk.",
-        HIGH: "Temperature too high! Hyperthermia risk.",
-        WARNING_LOW: "Warning: Approaching hypothermia.",
-        WARNING_HIGH: "Warning: Approaching hyperthermia.",
-        NORMAL: "Temperature normal."
-    },
-    'soc': {
-        LOW: "State of Charge too low!",
-        HIGH: "State of Charge too high!",
-        WARNING_LOW: "Warning: SOC approaching lower limit.",
-        WARNING_HIGH: "Warning: SOC approaching upper limit.",
-        NORMAL: "SOC normal."
-    },
-    'charge_rate': {
-        LOW: "Charge rate too low!",
-        HIGH: "Charge rate too high!",
-        WARNING_LOW: "Warning: Charge rate approaching minimum.",
-        WARNING_HIGH: "Warning: Charge rate approaching maximum.",
-        NORMAL: "Charge rate normal."
-    }
-}
-
-# Reporter interface
-class Reporter:
-    def report(self, vital_name, breach_type):
-        pass
-
-# Default reporter: prints to console
-class ConsoleReporter(Reporter):
-    def report(self, vital_name, breach_type):
-        print(MESSAGES[vital_name][breach_type])
-
-# Generic checker with warning zones
-def check_breach(value, vital_limits):
-    tolerance = vital_limits['max'] * TOLERANCE_FACTOR
-
-    if value < vital_limits['min']:
-        return LOW
-    elif value > vital_limits['max']:
-        return HIGH
-    elif vital_limits['min'] <= value <= vital_limits['min'] + tolerance:
-        return WARNING_LOW
-    elif vital_limits['max'] - tolerance <= value <= vital_limits['max']:
-        return WARNING_HIGH
+def classify_vital(value, vmin, vmax):
+    tol = vmax * TOLERANCE_FACTOR
+    if value < vmin: return LOW
+    if value > vmax: return HIGH
+    if value <= vmin + tol: return WARNING_LOW
+    if value >= vmax - tol: return WARNING_HIGH
     return NORMAL
 
-# Battery check function
 def battery_is_ok(temperature, soc, charge_rate, reporter=ConsoleReporter()):
-    vitals = {
-        'temperature': temperature,
-        'soc': soc,
-        'charge_rate': charge_rate
-    }
+    vitals = {'temperature': temperature, 'soc': soc, 'charge_rate': charge_rate}
     status = True
-    for vital_name, value in vitals.items():
-        breach = check_breach(value, LIMITS[vital_name])
+    for vital, val in vitals.items():
+        breach = classify_vital(val, LIMITS[vital]['min'], LIMITS[vital]['max'])
         if breach != NORMAL:
-            reporter.report(vital_name, breach)
-            if breach in (LOW, HIGH):
-                status = False  # hard failure only if out of range
+            reporter.report(vital, breach)
+            if breach in (LOW, HIGH): status = False
     return status
+
+# ✅ Tests
+def run_tests():
+    assert battery_is_ok(25, 70, 0.7) == True
+    assert battery_is_ok(-1, 70, 0.7) == False
+    assert battery_is_ok(46, 70, 0.7) == False
+    assert battery_is_ok(25, 19, 0.7) == False
+    assert battery_is_ok(25, 81, 0.7) == False
+    assert battery_is_ok(25, 70, 0.9) == False
+    print("Extension 1 optimized tests passed.")
+
+if __name__ == "__main__":
+    run_tests()
+
 
 # -----------------------
 # Unit tests
